@@ -1,0 +1,67 @@
+---
+# Copyright 2020 BBC R&D.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# define this to give a location to the public key installed into the
+# root user authorized_keys will default to using /root/.ssh/id_rsa.pub
+# if undefined
+#lxd_container_ssh_key: /path/to/public.key
+
+# the URL of a specific LXD snap to install
+# if this list is populated then the LXD snap is installed from a locally
+# downloaded file rather than from the snap store. This disables
+# auto-update of the snap which can be undesirable as it would happen outside
+# of the orchestration provided by openstack-ansible 
+lxd_install_snap_urls:
+  - "https://api.snapcraft.io/api/v1/snaps/download/J60k4JY0HppjwOjW8dZdYc8obXKxujRu_15564.snap"
+
+# the version specified here should correspond to the URL given in lxd_install_snap_urls
+lxd_install_snap_version: "4.2"
+
+# the storage pool to configure during lxd-init
+lxd_install_storage:
+  storage_backend: dir
+  storage_pool: default
+
+# locations to search for the lxc executable
+lxc_install_locations:
+  - '/usr/bin/lxc'
+  - '/snap/bin/lxc'
+
+# specify a non-empty password here to define an LXD trust password
+lxd_install_trust_password: ""
+
+# define this to use an http/https proxy in the LXD core configuration
+#lxd_install_http_proxy: https://proxy.example.com:8080
+
+# bind address and port for LXD API
+lxd_install_network_bind: 0.0.0.0                 # Which network address should LXD bind to
+lxd_install_network_port: 8443                    # Which network port should LXD bind to
+
+# define the list of images to download into the local storage pool
+lxd_images: "{{ _lxc_images }}"
+
+# define the LXD profiles to create
+lxd_profiles:
+  - name: default
+    devices:
+      eth0:
+        name: eth0
+        nictype: bridged
+        parent: lxdbr0
+        type: nic
+      root:
+        path: /
+        pool: default
+        type: disk

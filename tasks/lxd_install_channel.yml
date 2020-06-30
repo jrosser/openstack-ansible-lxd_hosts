@@ -1,0 +1,32 @@
+---
+# Copyright 2020 BBC R&D.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Check if LXD is following the expected channel
+  shell: 'snap info lxd | grep "tracking:" | tr -s " " | cut -d " " -f 2'
+  register: lxd_channel
+  changed_when: false
+  failed_when: false
+
+- name: Attempt LXD install from channel
+  command: 'snap install lxd --channel={{ lxd_install_snap_channel }}'
+  register: lxd_installed
+  when:
+    - lxd_channel.stdout | length == 0
+
+- name: Attempt LXD refresh from channel
+  command: 'snap refresh lxd --channel={{ lxd_install_snap_channel }}'
+  register: lxd_installed
+  when:
+    - lxd_channel.stdout != lxd_install_snap_channel

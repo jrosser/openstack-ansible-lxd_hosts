@@ -1,0 +1,85 @@
+---
+# Copyright 2020 BBC R&D.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Install distro packages
+  package:
+    name: "{{ lxd_hosts_distro_packages }}"
+    state: present
+
+- name: Start service snapd, if not running
+  service:
+    name: snapd
+    state: started
+
+- include_tasks: lxd_install_url.yml
+  when:
+    - lxd_install_snap_urls | length > 0
+
+- include_tasks: lxd_install_channel.yml
+  when:
+    - lxd_install_snap_urls | length == 0
+
+- name: Wait for Unix socket to be available for LXD
+  wait_for:
+    path: /var/snap/lxd/common/lxd/unix.socket
+    connect_timeout: 20
+
+- name: LXC binary location can differ so find lxc path from defined list
+  stat:
+    path: "{{ item }}"
+  register: lxc_exec_check
+  with_items: "{{ lxc_install_locations }}"
+
+- name: Now set our LXC binary path after it has been found
+  set_fact:
+    lxc_exec_path: "{{ item.item }}"
+  with_items: "{{ lxc_exec_check.results }}"
+  when:
+    - item.stat.exists is defined
+    - item.stat.exists
+
+- name: Get info about lxc for later checks
+  shell: "{{ lxc_exec_path }}lxc info"
+  register: lxc_configure_check
+  failed_when: lxc_configure_check.rc != 1 and lxc_configure_check.rc != 0 and lxc_configure_check.rc != 127
+  changed_when: false
+
+- name: Initialise LXD
+  command: >
+    /snap/bin/lxd init --auto
+    {% if lxd_install_trust_password | length > 0 %}--trust-password={{ lxd_install_trust_password }}{% endif %}
+    --network-address={{ lxd_install_network_bind }}
+    --network-port={{ lxd_install_network_port }}
+    {% if lxd_install_storage.storage_backend != 'dir' %}--storage-backend={{ lxd_install_storage.storage_backend }}
+    --storage-pool={{ lxd_install_storage.pool }}{% endif %}
+      when: ( lxc_configure_check.stdout is search(lxd_configure_value) or
+          lxc_configure_check.rc == 1 )
+
+- name: Check if system proxy is configured
+  shell: "{{ lxc_exec_path }} info | grep {{ lxd_install_http_proxy }}"
+  changed_when: false
+  register: lxc_proxy_configured
+  failed_when: lxc_proxy_configured.rc != 1 and lxc_proxy_configured.rc != 0
+  when: 
+    - lxd_install_http_proxy is defined
+
+- name: Set up LXC proxy when defined and settings not present
+  shell: "{{ lxc_exec_path }} config set {{ item }}"
+  with_items:
+    - "core.proxy_http {{ lxd_install_http_proxy }}"
+    - "core.proxy_https {{ lxd_install_http_proxy }}"
+  when:
+    - lxc_proxy_configured.rc | default(1) != 0
+    - lxd_install_http_proxy is defined

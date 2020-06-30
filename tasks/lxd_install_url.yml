@@ -1,0 +1,60 @@
+---
+# Copyright 2020 BBC R&D.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Check if LXD is installed via snapd
+  shell: 'snap info lxd | grep "installed:" | tr -s " " | cut -d " " -f 2'
+  register: lxd_version
+  changed_when: false
+  failed_when: false
+
+- name: Create a path to download the snap
+  tempfile:
+    suffix: ".snap"
+  register: lxd_tempfile
+  with_items: "{{ lxd_install_snap_urls }}"
+  when:
+    - lxd_version.stdout != lxd_install_snap_version
+
+- name: Download snap from HTTP path
+  get_url:
+    url: '{{ lxd_install_snap_urls[item.0] }}'
+    dest: '{{ item.1.path }}'
+    force: yes
+  with_indexed_items: "{{ lxd_tempfile.results }}"
+  register: lxd_download_snap
+  when:
+    - lxd_tempfile is changed
+    - lxd_version.stdout != lxd_install_snap_version
+
+- name: Attempt LXD install from file
+  command: 'snap install {{ item.path }} --dangerous'
+  register: lxd_installed
+  with_items: "{{ lxd_tempfile.results }}"
+  when:
+    - lxd_download_snap is changed
+
+- name: Add symlink for lxc command line tool
+  file:
+    src: lxd.lxc
+    dest: /snap/bin/lxc
+    state: link
+
+- name: Clean up temp files
+  file:
+    path: '{{ item.path }}'
+    state: absent
+  with_items: "{{ lxd_tempfile.results }}"
+  when:
+    - lxd_tempfile is changed
